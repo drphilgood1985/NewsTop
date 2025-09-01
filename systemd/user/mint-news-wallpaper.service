@@ -1,0 +1,16 @@
+[Unit]
+Description=Mint News Wallpaper (run once)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/projects/desktop/.env
+WorkingDirectory=%h/projects/desktop
+ExecStart=/usr/bin/env bash -lc 'source .env 2>/dev/null || true; node src/run-once.js'
+StandardOutput=append:%h/projects/desktop/logs/systemd.log
+StandardError=append:%h/projects/desktop/logs/systemd.log
+
+[Install]
+WantedBy=default.target
+

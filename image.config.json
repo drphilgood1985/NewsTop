@@ -1,0 +1,45 @@
+{
+  "style": "cinematic, photorealistic, high detail",
+  "vibe": "moody yet uplifting, dynamic lighting",
+  "artistHints": [
+    "in the style of National Geographic photography",
+    "inspired by documentary stills",
+    "subtle cinematic color grading"
+  ],
+  "negative": "text, watermark, logo, low-res, extra limbs, deformed",
+  "feeds": [
+    "https://feeds.bbci.co.uk/news/rss.xml",
+    "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+    "https://feeds.reuters.com/reuters/topNews",
+    "https://feeds.reuters.com/Reuters/worldNews"
+  ],
+  "keywords": {
+    "minLength": 4,
+    "max": 10
+  },
+  "resolution": { "width": 2560, "height": 1440 },
+  "geminiModel": "gemini-2.5-flash-image-preview",
+  "openaiTextModel": "gpt-4.1",
+  "stylePool": [
+    "fine art photography, prime lens, shallow depth of field",
+    "cinematic, anamorphic lens flare, rich contrast",
+    "documentary photography, natural light, candid composition",
+    "long exposure, silky motion blur, night photography",
+    "aerial photography, sweeping vistas, grand scale",
+    "macro photography, extreme detail, bokeh",
+    "black and white, high contrast, grainy film",
+    "color gel lighting, bold hues, studio look",
+    "moody noir, chiaroscuro lighting, dramatic shadows",
+    "golden hour, warm light, soft atmosphere",
+    "pastel tones, soft focus, dreamy haze",
+    "minimalist composition, negative space, clean lines",
+    "surrealism, dreamlike composition, visual metaphor",
+    "abstract shapes, geometric forms, modernist aesthetic",
+    "painterly impressionism, soft brush-like textures",
+    "hyperrealism, ultra-detailed textures, lifelike clarity",
+    "street photography, dynamic framing, human moments",
+    "landscape photography, epic clouds, sweeping light",
+    "architectural photography, symmetry, vanishing points",
+    "editorial fashion style, dramatic posing, couture"
+  ]
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Mint News Wallpaper at 04:00, 12:00, 19:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 12:00:00
+OnCalendar=*-*-* 19:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
