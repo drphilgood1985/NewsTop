@@ -41,3 +41,10 @@ export function joinUniqueWords(words, max = 10) {
   return unique.slice(0, max).join(', ');
 }
 
+// Append one JSON object as a line (JSONL). Ensures directory exists.
+export async function appendJsonLine(filePath, obj) {
+  const dir = path.dirname(filePath);
+  await ensureDir(dir);
+  const line = JSON.stringify(obj) + '\n';
+  await fs.appendFile(filePath, line, { encoding: 'utf8' });
+}

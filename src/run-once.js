@@ -55,12 +55,14 @@ async function main() {
   const { width = 2560, height = 1440 } = cfg.resolution || {};
   if (process.env.GEMINI_API_KEY) {
     try {
+      const modelToUse = process.env.GEMINI_MODEL || cfg.geminiModel;
       buffer = await generateWithGemini({
         prompt: refinedPrompt,
         apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || cfg.geminiModel,
+        model: modelToUse,
         width,
-        height
+        height,
+        logSource: 'auto'
       });
     } catch (e) {
       console.error('Gemini generation failed:', e.message);

@@ -31,6 +31,12 @@
   - `logs/` directory for log files
   - `output/test-background-*.png` for the generated image
 
+**Auto Prompt Logs**
+- Run-once (systemd/cron) appends every Gemini prompt to `logs/prompts.log` as JSON lines.
+- The `prompt` field is exactly the text sent to the Gemini endpoint (including any appended sizing instructions used by `models:generateContent`).
+- Fields: `ts`, `source`, `endpoint` (`images:generate` or `models:generateContent`), `model`, `resolution`, `prompt`.
+- Example: `{ "ts": "2025-01-01T12:00:00.000Z", "source": "auto", "endpoint": "models:generateContent", "model": "gemini-2.5-flash-image-preview", "resolution": { "width":2560, "height":1440 }, "prompt": "<exact text>" }`.
+
 **Schedule (cron)**
 - Install a cron job: `bash scripts/install-cron.sh`
 - Schedules at 04:00, 12:00, 19:00 local time. Logs to `logs/cron.log`.
@@ -52,7 +58,7 @@
 
 
 **Gemini/Imagen models**
-- For Gemini 2.5 image generation (e.g., `gemini-2.5-flash-image-preview`), the code prefers the `models:generateContent` API and automatically falls back to the Images API if supported. If you switch to an Imagen model (e.g., `imagen-3.0`), the Images API will be preferred.
+- For image models (names containing `imagen`, `image`, or `preview` such as `gemini-2.5-flash-image-preview`), the code now prefers the Images API for higher-resolution outputs, with fallback to `models:generateContent`.
 - You can override the model via `GEMINI_MODEL` in `.env` without editing `image.config.json`.
 
 
