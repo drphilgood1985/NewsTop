@@ -22,6 +22,21 @@
 - `npm run run-once`
 - Output: saves an image in `output/` and applies it as wallpaper.
 
+**Focus Filter (topics/categories)**
+- Restrict the run to a topic using `-focus` (or `--focus`/`-f`).
+- Examples:
+  - `npm run start -- -focus "sports"`
+  - `npm run start -- -focus "business"`
+  - `npm run start -- -focus "politics"`
+  - `npm run start -- -focus "entertainment"`
+  - `npm run start -- -focus "soccer"`
+  - `npm run start -- -focus "european rap"`
+  - Direct bin: `mint-news-wallpaper -focus "global trade"`
+- You can also set `FOCUS="..."` as an env var: `FOCUS="football" npm run start`.
+- Behavior:
+  - Headlines are filtered to those matching the phrase or any focus word (case-insensitive). If nothing matches, the run continues unfiltered.
+  - Focus words are merged into top keywords to bias the prompt.
+
 **Test Run (detailed logs)**
 - Run: `npm run test-run`
 - Console: prints timestamped steps and samples of headlines/keywords.

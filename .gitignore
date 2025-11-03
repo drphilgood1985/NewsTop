@@ -18,6 +18,8 @@ Output/
 
 # Environment files
 .env
+*sshid*
+
 # Common local env overrides
 .env.local
 .env.*.local
