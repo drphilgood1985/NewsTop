@@ -11,9 +11,10 @@ import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
 
 async function main() {
-  // Parse CLI args/environment for focus
+  // Parse CLI args/environment for focus/prompt overrides
   const args = process.argv.slice(2);
   let focusArg = null;
+  let promptArg = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '-focus' || a === '--focus' || a === '-f') {
@@ -23,65 +24,89 @@ async function main() {
     const m = a.match(/^--?focus=(.*)$/);
     if (m) { focusArg = m[1]; break; }
   }
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-prompt' || a === '--prompt' || a === '-p') {
+      promptArg = args[i + 1] || '';
+      break;
+    }
+    const m = a.match(/^--?prompt=(.*)$/);
+    if (m) { promptArg = m[1]; break; }
+    if (a.startsWith('-p=')) {
+      promptArg = a.slice(3);
+      break;
+    }
+  }
   const FOCUS = (focusArg || process.env.FOCUS || '').trim();
   if (FOCUS) log('Focus:', FOCUS);
+  const PROMPT_OVERRIDE = (promptArg || process.env.CUSTOM_PROMPT || '').trim();
+  if (PROMPT_OVERRIDE) log('Prompt override detected');
 
   const env = envConfig();
   const cfg = await loadImageConfig();
   const date = nowLocal();
 
-  // 1) Fetch headlines
-  let headlines = await fetchHeadlines(cfg.feeds || []);
-  if (FOCUS) {
-    const q = FOCUS.toLowerCase();
-    const words = Array.from(new Set(q.split(/[^\p{L}\p{N}]+/u).filter(Boolean)));
-    const hasWord = (s) => {
-      const low = (s || '').toLowerCase();
-      if (q && low.includes(q)) return true; // phrase match
-      // word match
-      return words.some(w => w.length >= 3 && low.includes(w));
-    };
-    const filtered = headlines.filter(h => hasWord(h));
-    if (filtered.length) {
-      log('Headlines filtered by focus:', filtered.length, 'of', headlines.length);
-      headlines = filtered;
-    } else {
-      log('No headlines matched focus; proceeding without headline filter');
+  let headlines = [];
+  let keywords = [];
+  let refinedPrompt = PROMPT_OVERRIDE;
+
+  if (PROMPT_OVERRIDE) {
+    log('Using provided prompt override; skipping news aggregation');
+  } else {
+    // 1) Fetch headlines
+    headlines = await fetchHeadlines(cfg.feeds || []);
+    if (FOCUS) {
+      const q = FOCUS.toLowerCase();
+      const words = Array.from(new Set(q.split(/[^\p{L}\p{N}]+/u).filter(Boolean)));
+      const hasWord = (s) => {
+        const low = (s || '').toLowerCase();
+        if (q && low.includes(q)) return true; // phrase match
+        // word match
+        return words.some(w => w.length >= 3 && low.includes(w));
+      };
+      const filtered = headlines.filter(h => hasWord(h));
+      if (filtered.length) {
+        log('Headlines filtered by focus:', filtered.length, 'of', headlines.length);
+        headlines = filtered;
+      } else {
+        log('No headlines matched focus; proceeding without headline filter');
+      }
+    }
+    if (!headlines.length) throw new Error('No headlines fetched');
+
+    // 2) Extract keywords
+    keywords = extractKeywordsFromHeadlines(headlines, cfg.keywords || {});
+    if (FOCUS) {
+      const focusWords = Array.from(new Set(FOCUS.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)));
+      // Prepend focus words and trim to max unique items
+      const max = (cfg.keywords && cfg.keywords.max) || 10;
+      const merged = joinUniqueWords([...focusWords, ...keywords], max);
+      keywords = merged.split(/\s*,\s*/).filter(Boolean);
+    }
+    if (!keywords.length) throw new Error('No keywords extracted');
+
+    // 3) Build a base prompt (context) and refine via OpenAI for best quality
+    const basePrompt = buildPrompt({ keywords, cfg, date });
+    log('BasePrompt:', basePrompt);
+
+    refinedPrompt = basePrompt;
+    if (env.OPENAI_API_KEY) {
+      try {
+        const { prompt: p } = await refinePromptWithOpenAI({
+          headlines,
+          keywords,
+          cfg,
+          apiKey: env.OPENAI_API_KEY,
+          model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
+          date
+        });
+        refinedPrompt = p;
+      } catch (e) {
+        console.error('OpenAI prompt refinement failed:', e.message);
+      }
     }
   }
-  if (!headlines.length) throw new Error('No headlines fetched');
 
-  // 2) Extract keywords
-  let keywords = extractKeywordsFromHeadlines(headlines, cfg.keywords || {});
-  if (FOCUS) {
-    const focusWords = Array.from(new Set(FOCUS.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)));
-    // Prepend focus words and trim to max unique items
-    const max = (cfg.keywords && cfg.keywords.max) || 10;
-    const merged = joinUniqueWords([...focusWords, ...keywords], max);
-    keywords = merged.split(/\s*,\s*/).filter(Boolean);
-  }
-  if (!keywords.length) throw new Error('No keywords extracted');
-
-  // 3) Build a base prompt (context) and refine via OpenAI for best quality
-  const basePrompt = buildPrompt({ keywords, cfg, date });
-  log('BasePrompt:', basePrompt);
-
-  let refinedPrompt = basePrompt;
-  if (env.OPENAI_API_KEY) {
-    try {
-      const { prompt: p } = await refinePromptWithOpenAI({
-        headlines,
-        keywords,
-        cfg,
-        apiKey: env.OPENAI_API_KEY,
-        model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
-        date
-      });
-      refinedPrompt = p;
-    } catch (e) {
-      console.error('OpenAI prompt refinement failed:', e.message);
-    }
-  }
   log('RefinedPrompt:', refinedPrompt);
 
   // 4) Generate image

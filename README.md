@@ -35,7 +35,13 @@
 - You can also set `FOCUS="..."` as an env var: `FOCUS="football" npm run start`.
 - Behavior:
   - Headlines are filtered to those matching the phrase or any focus word (case-insensitive). If nothing matches, the run continues unfiltered.
-  - Focus words are merged into top keywords to bias the prompt.
+- Focus words are merged into top keywords to bias the prompt.
+
+**Custom Prompt Override**
+- Skip news-driven prompts entirely with `-prompt` / `--prompt` / `-p`.
+- Example: `npm run start -- -prompt "a man in front of a seaside cafe sips coffee while seagulls circle"`
+- The supplied text becomes the exact image prompt (OpenAI refinement and keyword extraction are bypassed).
+- You can also set `CUSTOM_PROMPT="..." npm run start` for automation/scripting.
 
 **Test Run (detailed logs)**
 - Run: `npm run test-run`
