@@ -7,7 +7,9 @@ export async function refinePromptWithOpenAI({
   cfg,
   apiKey,
   model = 'gpt-4.1',
-  date = new Date()
+  date = new Date(),
+  customPrompt = '',
+  basePrompt = ''
 }) {
   const timeDesc = timeOfDayDescriptor(date);
   // Pick a random style from stylePool if available
@@ -21,6 +23,8 @@ export async function refinePromptWithOpenAI({
     'Requirements:',
     '- Be concise but evocative (1–3 sentences).',
     '- Incorporate the supplied keywords/themes and time-of-day.',
+    '- When a custom prompt is supplied, treat it as the centerpiece and elevate it with cinematic/painterly detail.',
+    '- Infer tasteful references to modern or classic pop culture (film, TV, music, games, literature, design) when they complement the concept; avoid direct quotes or trademarked slogans.',
     '- Select 1–3 concrete subjects (people, places, or objects) from the themes/headlines to feature prominently as focal points; compose the scene around them.',
     '- Weave in the provided style/vibe and the randomly chosen art/photography style.',
     '- Include a short, compact negative prompt at the end prefixed with "Avoid:".',
@@ -35,7 +39,9 @@ export async function refinePromptWithOpenAI({
     vibe: cfg?.vibe || '',
     selectedStyle,
     negative: cfg?.negative || '',
-    headlineSamples: headlines.slice(0, 8)
+    headlineSamples: headlines.slice(0, 8),
+    customPrompt,
+    basePrompt
   };
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {

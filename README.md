@@ -1,7 +1,7 @@
 **Overview**
 - Purpose: Generates a wallpaper from news keywords at 04:00, 12:00, 19:00 and sets it as your Linux Mint desktop background.
 - Inputs: RSS headlines, time of day, extra context from `image.config.json`.
-- Quality-first pipeline: Refines a polished imagery prompt with OpenAI, then generates the image with Google Gemini/Imagen (high quality). Falls back to a random themed photo if APIs are absent.
+- Quality-first pipeline: OpenAI infers a cinematic/painterly prompt (pulling tasteful pop-culture context when it helps) and Gemini/Imagen renders the wallpaper. Falls back to a random themed photo if APIs are absent.
 
 **Setup**
 - Requirements: Node.js 18+, `gsettings` (default on Cinnamon/GNOME), network connectivity.
@@ -40,7 +40,7 @@
 **Custom Prompt Override**
 - Skip news-driven prompts entirely with `-prompt` / `--prompt` / `-p`.
 - Example: `npm run start -- -prompt "a man in front of a seaside cafe sips coffee while seagulls circle"`
-- The supplied text becomes the exact image prompt (OpenAI refinement and keyword extraction are bypassed).
+- The supplied text becomes the base scene; if `OPENAI_API_KEY` is set the refiner enhances it with relevant pop-culture cues before passing it to Gemini.
 - You can also set `CUSTOM_PROMPT="..." npm run start` for automation/scripting.
 
 **Test Run (detailed logs)**

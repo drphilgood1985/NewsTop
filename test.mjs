@@ -98,7 +98,8 @@ async function main() {
         cfg,
         apiKey: env.OPENAI_API_KEY,
         model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
-        date: new Date()
+        date: new Date(),
+        basePrompt
       });
       refinedPrompt = p;
       clog('INFO', 'Refined prompt created via OpenAI');

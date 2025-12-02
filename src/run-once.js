@@ -4,9 +4,8 @@ import { envConfig, loadImageConfig, resolveOutputPath, timestampSlug } from './
 import { fetchHeadlines } from './news.js';
 import { extractKeywordsFromHeadlines } from './keywords.js';
 import { buildPrompt } from './prompt.js';
-import { fallbackRandomImage, saveImage } from './image.js';
+import { generateWithOpenAI, fallbackRandomImage, saveImage } from './image.js';
 import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
-import { generateWithGemini } from './image-gemini.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
 
@@ -15,6 +14,7 @@ async function main() {
   const args = process.argv.slice(2);
   let focusArg = null;
   let promptArg = null;
+   let providerArg = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '-focus' || a === '--focus' || a === '-f') {
@@ -37,10 +37,21 @@ async function main() {
       break;
     }
   }
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--provider') {
+      providerArg = args[i + 1] || '';
+      break;
+    }
+    const m = a.match(/^--provider=(.*)$/);
+    if (m) { providerArg = m[1]; break; }
+  }
   const FOCUS = (focusArg || process.env.FOCUS || '').trim();
   if (FOCUS) log('Focus:', FOCUS);
   const PROMPT_OVERRIDE = (promptArg || process.env.CUSTOM_PROMPT || '').trim();
   if (PROMPT_OVERRIDE) log('Prompt override detected');
+  const PROVIDER = (providerArg || process.env.IMAGE_PROVIDER || 'openai').trim().toLowerCase();
+  log('Image provider:', PROVIDER || 'default');
 
   const env = envConfig();
   const cfg = await loadImageConfig();
@@ -48,10 +59,19 @@ async function main() {
 
   let headlines = [];
   let keywords = [];
-  let refinedPrompt = PROMPT_OVERRIDE;
+  let basePrompt = PROMPT_OVERRIDE;
 
   if (PROMPT_OVERRIDE) {
     log('Using provided prompt override; skipping news aggregation');
+    const tokens = PROMPT_OVERRIDE
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(w => w.length >= 3);
+    if (tokens.length) {
+      const max = (cfg.keywords && cfg.keywords.max) || 10;
+      const merged = joinUniqueWords(tokens, max);
+      keywords = merged.split(/\s*,\s*/).filter(Boolean);
+    }
   } else {
     // 1) Fetch headlines
     headlines = await fetchHeadlines(cfg.feeds || []);
@@ -86,27 +106,29 @@ async function main() {
     if (!keywords.length) throw new Error('No keywords extracted');
 
     // 3) Build a base prompt (context) and refine via OpenAI for best quality
-    const basePrompt = buildPrompt({ keywords, cfg, date });
-    log('BasePrompt:', basePrompt);
-
-    refinedPrompt = basePrompt;
-    if (env.OPENAI_API_KEY) {
-      try {
-        const { prompt: p } = await refinePromptWithOpenAI({
-          headlines,
-          keywords,
-          cfg,
-          apiKey: env.OPENAI_API_KEY,
-          model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
-          date
-        });
-        refinedPrompt = p;
-      } catch (e) {
-        console.error('OpenAI prompt refinement failed:', e.message);
-      }
-    }
+    basePrompt = buildPrompt({ keywords, cfg, date });
   }
 
+  log('BasePrompt:', basePrompt);
+
+  let refinedPrompt = basePrompt;
+  if (env.OPENAI_API_KEY) {
+    try {
+      const { prompt: p } = await refinePromptWithOpenAI({
+        headlines,
+        keywords,
+        cfg,
+        apiKey: env.OPENAI_API_KEY,
+        model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
+        date,
+        customPrompt: PROMPT_OVERRIDE,
+        basePrompt
+      });
+      refinedPrompt = p;
+    } catch (e) {
+      console.error('OpenAI prompt refinement failed:', e.message);
+    }
+  }
   log('RefinedPrompt:', refinedPrompt);
 
   // 4) Generate image
@@ -117,20 +139,26 @@ async function main() {
   const baseName = `background-${ts}`;
   let buffer;
   const { width = 2560, height = 1440 } = cfg.resolution || {};
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const modelToUse = process.env.GEMINI_MODEL || cfg.geminiModel;
-      buffer = await generateWithGemini({
+  try {
+    if ((PROVIDER === 'openai' || !PROVIDER) && env.OPENAI_API_KEY) {
+      buffer = await generateWithOpenAI({
         prompt: refinedPrompt,
-        apiKey: process.env.GEMINI_API_KEY,
-        model: modelToUse,
+        apiKey: env.OPENAI_API_KEY,
         width,
-        height,
-        logSource: 'auto'
+        height
       });
-    } catch (e) {
-      console.error('Gemini generation failed:', e.message);
+    } else if (PROVIDER === 'fallback') {
+      buffer = await fallbackRandomImage(keywords, { width, height });
+    } else if (env.OPENAI_API_KEY) {
+      buffer = await generateWithOpenAI({
+        prompt: refinedPrompt,
+        apiKey: env.OPENAI_API_KEY,
+        width,
+        height
+      });
     }
+  } catch (e) {
+    console.error('Image generation failed with provider', PROVIDER || 'default', '-', e.message);
   }
   if (!buffer) {
     buffer = await fallbackRandomImage(keywords, { width, height });
