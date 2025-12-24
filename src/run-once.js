@@ -112,17 +112,14 @@ async function main() {
   log('BasePrompt:', basePrompt);
 
   let refinedPrompt = basePrompt;
-  if (env.OPENAI_API_KEY) {
+  if (env.OPENAI_API_KEY && !PROMPT_OVERRIDE) {
     try {
       const { prompt: p } = await refinePromptWithOpenAI({
         headlines,
-        keywords,
         cfg,
         apiKey: env.OPENAI_API_KEY,
         model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
-        date,
-        customPrompt: PROMPT_OVERRIDE,
-        basePrompt
+        date
       });
       refinedPrompt = p;
     } catch (e) {
