@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ensureDir, log, writeFileAtomic } from './util.js';
 
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+
 async function fetchBuffer(url, opts = {}) {
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
@@ -72,6 +74,17 @@ export async function fallbackRandomImage(keywords, { width = 1920, height = 108
     }
   }
   throw lastErr || new Error('All fallback image sources failed');
+}
+
+export async function pickRandomImageFromDir(dir) {
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files = entries
+    .filter(entry => entry.isFile())
+    .map(entry => entry.name)
+    .filter(name => IMAGE_EXTENSIONS.has(path.extname(name).toLowerCase()));
+  if (!files.length) return null;
+  const name = files[Math.floor(Math.random() * files.length)];
+  return path.join(dir, name);
 }
 
 export async function saveImage(buffer, outDir, filenameBase = 'background', ext = 'png') {

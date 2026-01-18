@@ -4,10 +4,15 @@ import { envConfig, loadImageConfig, resolveOutputPath, timestampSlug } from './
 import { fetchHeadlines } from './news.js';
 import { extractKeywordsFromHeadlines } from './keywords.js';
 import { buildPrompt } from './prompt.js';
-import { generateWithOpenAI, fallbackRandomImage, saveImage } from './image.js';
+import { generateWithOpenAI, fallbackRandomImage, pickRandomImageFromDir, saveImage } from './image.js';
 import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
+
+function isInsufficientTokensError(err) {
+  const msg = (err?.message || String(err || '')).toLowerCase();
+  return msg.includes('insufficient tokens');
+}
 
 async function main() {
   // Parse CLI args/environment for focus/prompt overrides
@@ -134,6 +139,7 @@ async function main() {
   await ensureDir(outDir);
 
   const baseName = `background-${ts}`;
+  let imgPath = '';
   let buffer;
   const { width = 2560, height = 1440 } = cfg.resolution || {};
   try {
@@ -156,13 +162,23 @@ async function main() {
     }
   } catch (e) {
     console.error('Image generation failed with provider', PROVIDER || 'default', '-', e.message);
+    if (isInsufficientTokensError(e)) {
+      imgPath = await pickRandomImageFromDir(outDir);
+      if (imgPath) {
+        console.log('Using existing image due to insufficient tokens:', imgPath);
+      } else {
+        console.warn('No images found in output folder for insufficient tokens fallback.');
+      }
+    }
   }
-  if (!buffer) {
+  if (!buffer && !imgPath) {
     buffer = await fallbackRandomImage(keywords, { width, height });
   }
 
-  const imgPath = await saveImage(buffer, outDir, baseName, 'png');
-  console.log('Saved wallpaper:', imgPath);
+  if (!imgPath) {
+    imgPath = await saveImage(buffer, outDir, baseName, 'png');
+    console.log('Saved wallpaper:', imgPath);
+  }
 
   // 5) Set wallpaper
   await setWallpaper(imgPath, env.DESKTOP_ENV);

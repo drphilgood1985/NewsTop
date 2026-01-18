@@ -1,5 +1,5 @@
 **Overview**
-- Purpose: Generates a wallpaper from news keywords at 04:00, 12:00, 19:00 and sets it as your Linux Mint desktop background.
+- Purpose: Generates a wallpaper from news keywords at 04:00 and sets it as your Linux Mint desktop background.
 - Inputs: RSS headlines, time of day, extra context from `image.config.json`.
 - Quality-first pipeline: OpenAI infers a cinematic/painterly prompt (pulling tasteful pop-culture context when it helps) and Gemini/Imagen renders the wallpaper. Falls back to a random themed photo if APIs are absent.
 
@@ -60,7 +60,7 @@
 
 **Schedule (cron)**
 - Install a cron job: `bash scripts/install-cron.sh`
-- Schedules at 04:00, 12:00, 19:00 local time. Logs to `logs/cron.log`.
+- Schedules at 04:00 local time. Logs to `logs/cron.log`.
 
 **How It Works**
 - Fetch: RSS feeds in `image.config.json`.

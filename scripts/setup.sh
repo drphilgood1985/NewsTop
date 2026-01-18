@@ -63,12 +63,10 @@ EOF
 echo "[setup] Writing systemd user timer to $TIMER_FILE"
 cat >"$TIMER_FILE" <<EOF
 [Unit]
-Description=Run Mint News Wallpaper at 04:00, 12:00, 19:00
+Description=Run Mint News Wallpaper at 04:00
 
 [Timer]
 OnCalendar=*-*-* 04:00:00
-OnCalendar=*-*-* 12:00:00
-OnCalendar=*-*-* 19:00:00
 Persistent=true
 
 [Install]
@@ -82,4 +80,3 @@ systemctl --user enable --now ${SERVICE_NAME}.timer
 echo "[setup] Done. View timers: systemctl --user list-timers --all | grep ${SERVICE_NAME}"
 echo "[setup] Run now: systemctl --user start ${SERVICE_NAME}.service"
 echo "[setup] Logs: journalctl --user -u ${SERVICE_NAME} --since today -f"
-
