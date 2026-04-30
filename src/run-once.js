@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { envConfig, loadImageConfig, resolveOutputPath, timestampSlug } from './config.js';
+import { envConfig, loadImageConfig, timestampSlug } from './config.js';
 import { fetchHeadlines } from './news.js';
 import { extractKeywordsFromHeadlines } from './keywords.js';
 import { buildPrompt } from './prompt.js';
-import { generateWithOpenAI, fallbackRandomImage, pickRandomImageFromDir, saveImage } from './image.js';
-import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
+import { fallbackRandomImage, pickRandomImageFromDir, saveImage } from './image.js';
+import { generateWithGemini } from './image-gemini.js';
+import { refinePromptWithGemini } from './refinePrompt.gemini.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
 
-function isInsufficientTokensError(err) {
+function isQuotaError(err) {
   const msg = (err?.message || String(err || '')).toLowerCase();
-  return msg.includes('insufficient tokens');
+  return err?.status === 429 ||
+    msg.includes('insufficient tokens') ||
+    msg.includes('quota') ||
+    msg.includes('billing');
 }
 
 async function main() {
@@ -19,7 +23,7 @@ async function main() {
   const args = process.argv.slice(2);
   let focusArg = null;
   let promptArg = null;
-   let providerArg = null;
+  let providerArg = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '-focus' || a === '--focus' || a === '-f') {
@@ -55,7 +59,11 @@ async function main() {
   if (FOCUS) log('Focus:', FOCUS);
   const PROMPT_OVERRIDE = (promptArg || process.env.CUSTOM_PROMPT || '').trim();
   if (PROMPT_OVERRIDE) log('Prompt override detected');
-  const PROVIDER = (providerArg || process.env.IMAGE_PROVIDER || 'openai').trim().toLowerCase();
+  const rawProvider = (providerArg || process.env.IMAGE_PROVIDER || 'gemini').trim().toLowerCase();
+  const PROVIDER = rawProvider === 'openai' ? 'gemini' : rawProvider;
+  if (rawProvider === 'openai') {
+    console.warn('IMAGE_PROVIDER=openai is deprecated in this Gemini pipeline; using Gemini instead.');
+  }
   log('Image provider:', PROVIDER || 'default');
 
   const env = envConfig();
@@ -110,25 +118,25 @@ async function main() {
     }
     if (!keywords.length) throw new Error('No keywords extracted');
 
-    // 3) Build a base prompt (context) and refine via OpenAI for best quality
+    // 3) Build a base prompt (context) and refine via Gemini for best quality
     basePrompt = buildPrompt({ keywords, cfg, date });
   }
 
   log('BasePrompt:', basePrompt);
 
   let refinedPrompt = basePrompt;
-  if (env.OPENAI_API_KEY && !PROMPT_OVERRIDE) {
+  if (env.GEMINI_API_KEY && !PROMPT_OVERRIDE) {
     try {
-      const { prompt: p } = await refinePromptWithOpenAI({
+      const { prompt: p } = await refinePromptWithGemini({
         headlines,
         cfg,
-        apiKey: env.OPENAI_API_KEY,
-        model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
+        apiKey: env.GEMINI_API_KEY,
+        model: process.env.GEMINI_TEXT_MODEL || cfg.geminiTextModel || 'gemini-2.5-flash',
         date
       });
       refinedPrompt = p;
     } catch (e) {
-      console.error('OpenAI prompt refinement failed:', e.message);
+      console.error('Gemini prompt refinement failed:', e.message);
     }
   }
   log('RefinedPrompt:', refinedPrompt);
@@ -143,31 +151,30 @@ async function main() {
   let buffer;
   const { width = 2560, height = 1440 } = cfg.resolution || {};
   try {
-    if ((PROVIDER === 'openai' || !PROVIDER) && env.OPENAI_API_KEY) {
-      buffer = await generateWithOpenAI({
+    if ((PROVIDER === 'gemini' || !PROVIDER) && env.GEMINI_API_KEY) {
+      buffer = await generateWithGemini({
         prompt: refinedPrompt,
-        apiKey: env.OPENAI_API_KEY,
+        apiKey: env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image',
         width,
-        height
+        height,
+        logSource: 'auto'
       });
     } else if (PROVIDER === 'fallback') {
       buffer = await fallbackRandomImage(keywords, { width, height });
-    } else if (env.OPENAI_API_KEY) {
-      buffer = await generateWithOpenAI({
-        prompt: refinedPrompt,
-        apiKey: env.OPENAI_API_KEY,
-        width,
-        height
-      });
+    } else if (PROVIDER === 'gemini') {
+      console.warn('GEMINI_API_KEY absent; using fallback image source');
+    } else {
+      console.warn(`Unknown IMAGE_PROVIDER "${PROVIDER}"; using fallback image source`);
     }
   } catch (e) {
     console.error('Image generation failed with provider', PROVIDER || 'default', '-', e.message);
-    if (isInsufficientTokensError(e)) {
+    if (isQuotaError(e)) {
       imgPath = await pickRandomImageFromDir(outDir);
       if (imgPath) {
-        console.log('Using existing image due to insufficient tokens:', imgPath);
+        console.log('Using existing image due to generation quota/billing error:', imgPath);
       } else {
-        console.warn('No images found in output folder for insufficient tokens fallback.');
+        console.warn('No images found in output folder for quota/billing fallback.');
       }
     }
   }

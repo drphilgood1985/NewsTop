@@ -1,21 +1,21 @@
 **Overview**
 - Purpose: Generates a wallpaper from news keywords at 04:00 and sets it as your Linux Mint desktop background.
 - Inputs: RSS headlines, time of day, extra context from `image.config.json`.
-- Quality-first pipeline: OpenAI infers a cinematic/painterly prompt (pulling tasteful pop-culture context when it helps) and Gemini/Imagen renders the wallpaper. Falls back to a random themed photo if APIs are absent.
+- Quality-first pipeline: Gemini refines a cinematic/painterly prompt and Gemini/Imagen renders the wallpaper. Falls back to a random themed photo if APIs are absent.
 
 **Setup**
 - Requirements: Node.js 18+, `gsettings` (default on Cinnamon/GNOME), network connectivity.
 - Install deps: `npm install`
 - Configure env: copy `.env.example` to `.env` and set values.
-  - `OPENAI_API_KEY`: required for best prompt refinement.
-  - `OPENAI_MODEL`: defaults to `gpt-4.1` for high-quality text.
-  - `GEMINI_API_KEY`: required for image generation with Gemini/Imagen.
+  - `GEMINI_API_KEY`: required for prompt refinement and image generation with Gemini/Imagen.
+  - `GEMINI_TEXT_MODEL`: defaults to `gemini-2.5-flash` for prompt refinement.
+  - `GEMINI_MODEL`: defaults to `gemini-2.5-flash-image` for image generation.
   - `DESKTOP_ENV`: `cinnamon` (Mint default) or `gnome`.
   - `OUTPUT_DIR`: where images are saved (default `output`).
 - Edit `image.config.json` to tune style, vibe, negative prompts, feeds, and keyword limits.
   - `resolution`: `{ "width": 2560, "height": 1440 }` (your display)
-  - `geminiModel`: e.g., `gemini-2.5-flash-image-preview` (from AI Studio “Get code” name)
-  - `openaiTextModel`: defaults to `gpt-4.1`
+  - `geminiModel`: e.g., `gemini-2.5-flash-image` or `imagen-4.0-fast-generate-001`
+  - `geminiTextModel`: defaults to `gemini-2.5-flash`
   - `stylePool`: random art/photography styles chosen per run
 
 **Run Once**
@@ -40,7 +40,7 @@
 **Custom Prompt Override**
 - Skip news-driven prompts entirely with `-prompt` / `--prompt` / `-p`.
 - Example: `npm run start -- -prompt "a man in front of a seaside cafe sips coffee while seagulls circle"`
-- The supplied text becomes the base scene; if `OPENAI_API_KEY` is set the refiner enhances it with relevant pop-culture cues before passing it to Gemini.
+- The supplied text becomes the base scene and is passed directly to Gemini.
 - You can also set `CUSTOM_PROMPT="..." npm run start` for automation/scripting.
 
 **Test Run (detailed logs)**
@@ -65,7 +65,7 @@
 **How It Works**
 - Fetch: RSS feeds in `image.config.json`.
 - Extract: frequency-based keywords, stopword-filtered.
-- Refine: OpenAI (`openaiTextModel`, default `gpt-4.1`) crafts one polished imagery prompt that includes time-of-day, vibe, and a randomly selected style from `stylePool` plus a compact negative prompt.
+- Refine: Gemini (`geminiTextModel`, default `gemini-2.5-flash`) crafts one polished imagery prompt that includes time-of-day, vibe, and a randomly selected style from `stylePool` plus a compact negative prompt.
   - The refiner explicitly selects 1–3 concrete subjects (people, places, or objects) to feature prominently, and composes the scene around them.
 - Generate: Google Gemini/Imagen (`geminiModel`) renders a high-resolution image (default 2560x1440).
 - Fallback: If generation fails or keys are missing, pulls a themed random photo.
@@ -79,8 +79,9 @@
 
 
 **Gemini/Imagen models**
-- For image models (names containing `imagen`, `image`, or `preview` such as `gemini-2.5-flash-image-preview`), the code now prefers the Images API for higher-resolution outputs, with fallback to `models:generateContent`.
-- You can override the model via `GEMINI_MODEL` in `.env` without editing `image.config.json`.
+- Gemini image models such as `gemini-2.5-flash-image` use `models:generateContent`.
+- Imagen models such as `imagen-4.0-fast-generate-001` use `models:predict` and support wallpaper-friendly aspect ratios.
+- You can override the image model via `GEMINI_MODEL` in `.env` without editing `image.config.json`.
 
 
 **Example Log Snippet**

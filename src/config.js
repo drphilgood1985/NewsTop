@@ -14,7 +14,7 @@ export async function loadImageConfig(cwd = process.cwd()) {
 
 export function envConfig() {
   return {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
     DESKTOP_ENV: (process.env.DESKTOP_ENV || 'cinnamon').toLowerCase(),
     OUTPUT_DIR: process.env.OUTPUT_DIR || 'output'
   };
@@ -33,4 +33,3 @@ export function timestampSlug(d = new Date()) {
   const mi = pad(d.getMinutes());
   return `${yyyy}${mm}${dd}-${hh}${mi}`;
 }
-

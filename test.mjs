@@ -15,7 +15,7 @@ import { fetchHeadlines } from './src/news.js';
 import { extractKeywordsFromHeadlines } from './src/keywords.js';
 import { buildPrompt } from './src/prompt.js';
 import { fallbackRandomImage } from './src/image.js';
-import { refinePromptWithOpenAI } from './src/refinePrompt.openai.js';
+import { refinePromptWithGemini } from './src/refinePrompt.gemini.js';
 import { generateWithGemini } from './src/image-gemini.js';
 import { setWallpaper } from './src/wallpaper.js';
 
@@ -51,7 +51,7 @@ async function main() {
 
   // Load env + image config
   const env = envConfig();
-  jlog('INFO', { env: { DESKTOP_ENV: env.DESKTOP_ENV, OUTPUT_DIR: env.OUTPUT_DIR, OPENAI: env.OPENAI_API_KEY ? 'present' : 'absent' } });
+  jlog('INFO', { env: { DESKTOP_ENV: env.DESKTOP_ENV, OUTPUT_DIR: env.OUTPUT_DIR, GEMINI: env.GEMINI_API_KEY ? 'present' : 'absent' } });
 
   let cfg;
   try {
@@ -84,49 +84,48 @@ async function main() {
     clog('WARN', 'No keywords extracted. Continuing with fallback image generation.');
   }
 
-  // Build base prompt and refine via OpenAI
+  // Build base prompt and refine via Gemini
   const basePrompt = buildPrompt({ keywords, cfg, date: new Date() });
   clog('INFO', 'Base prompt built:');
   clog('PROMPT', basePrompt);
 
   let refinedPrompt = basePrompt;
-  if (env.OPENAI_API_KEY) {
+  if (env.GEMINI_API_KEY) {
     try {
-      const { prompt: p, selectedStyle } = await refinePromptWithOpenAI({
+      const { prompt: p, selectedStyle } = await refinePromptWithGemini({
         headlines,
         keywords,
         cfg,
-        apiKey: env.OPENAI_API_KEY,
-        model: cfg.openaiTextModel || process.env.OPENAI_MODEL || 'gpt-4.1',
-        date: new Date(),
-        basePrompt
+        apiKey: env.GEMINI_API_KEY,
+        model: process.env.GEMINI_TEXT_MODEL || cfg.geminiTextModel || 'gemini-2.5-flash',
+        date: new Date()
       });
       refinedPrompt = p;
-      clog('INFO', 'Refined prompt created via OpenAI');
+      clog('INFO', 'Refined prompt created via Gemini');
       if (selectedStyle) clog('INFO', 'Random style selected:', selectedStyle);
       clog('PROMPT', refinedPrompt);
     } catch (e) {
-      clog('WARN', 'OpenAI prompt refinement failed:', e?.message || e);
+      clog('WARN', 'Gemini prompt refinement failed:', e?.message || e);
     }
   } else {
-    clog('WARN', 'OPENAI_API_KEY absent; using base prompt without refinement');
+    clog('WARN', 'GEMINI_API_KEY absent; using base prompt without refinement');
   }
 
   // Generate/fetch image
   let buffer;
   let generator = 'fallback';
   const g0 = performance.now();
-  if (process.env.GEMINI_API_KEY) {
+  if (env.GEMINI_API_KEY) {
     try {
       buffer = await generateWithGemini({
         prompt: refinedPrompt,
-        apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || cfg.geminiModel,
+        apiKey: env.GEMINI_API_KEY,
+        model: process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image',
         width: (cfg.resolution && cfg.resolution.width) || 2560,
         height: (cfg.resolution && cfg.resolution.height) || 1440
       });
-      generator = (process.env.GEMINI_MODEL || cfg.geminiModel) + ' (gemini)';
-      clog('INFO', 'Gemini image generated with model:', (process.env.GEMINI_MODEL || cfg.geminiModel));
+      generator = (process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image') + ' (gemini)';
+      clog('INFO', 'Gemini image generated with model:', (process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image'));
     } catch (e) {
       clog('WARN', 'Gemini generation failed:', e?.message || e);
     }

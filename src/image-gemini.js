@@ -1,4 +1,4 @@
-// Generate an image using Google AI APIs. Tries Images API first, then models:generateContent fallback.
+// Generate an image using Google AI APIs.
 import path from 'node:path';
 import { ensureDir, appendJsonLine } from './util.js';
 
@@ -19,36 +19,53 @@ async function logPromptLine({ endpoint, model, width, height, text, source }) {
   }
 }
 
-async function tryImagesGenerate({ prompt, apiKey, model, width, height, logSource }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/images:generate?key=${encodeURIComponent(apiKey)}`;
-  const body = {
-    model,
-    prompt: { text: prompt },
-    size: `${width}x${height}`
-  };
-  if (logSource) {
-    await logPromptLine({ endpoint: 'images:generate', model, width, height, text: body.prompt.text, source: logSource });
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    const err = new Error(`Gemini Images API error ${res.status}: ${text}`);
-    err.status = res.status;
-    throw err;
-  }
-  const json = await res.json();
-  const b64 = json?.images?.[0]?.data?.b64 || json?.images?.[0]?.b64 || json?.candidates?.[0]?.image?.b64;
-  if (!b64) throw new Error('Gemini Images API: missing image data');
-  return Buffer.from(b64, 'base64');
+function closestAspectRatio(width, height) {
+  const aspect = width && height ? width / height : 16 / 9;
+  const candidates = [
+    { value: '1:1', ratio: 1 },
+    { value: '4:3', ratio: 4 / 3 },
+    { value: '3:4', ratio: 3 / 4 },
+    { value: '16:9', ratio: 16 / 9 },
+    { value: '9:16', ratio: 9 / 16 }
+  ];
+  return candidates
+    .map(candidate => ({
+      ...candidate,
+      distance: Math.abs(Math.log(aspect / candidate.ratio))
+    }))
+    .sort((a, b) => a.distance - b.distance)[0].value;
 }
 
-async function tryModelsGenerateContent({ prompt, apiKey, model, width, height, logSource }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const textToSend = `${prompt}\n\nGenerate a ${width}x${height} PNG wallpaper. Return only the image as inline data.`;
+function extractInlineImage(json) {
+  const candidates = json?.candidates || [];
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts || [];
+    const inline = parts.find(part => (
+      part?.inlineData?.data ||
+      part?.inline_data?.data
+    ));
+    const data = inline?.inlineData?.data || inline?.inline_data?.data;
+    if (data) return data;
+  }
+  return '';
+}
+
+function extractPredictionImage(json) {
+  const predictions = json?.predictions || [];
+  for (const prediction of predictions) {
+    const data =
+      prediction?.bytesBase64Encoded ||
+      prediction?.image?.bytesBase64Encoded ||
+      prediction?.image?.imageBytes ||
+      prediction?.imageBytes;
+    if (data) return data;
+  }
+  return '';
+}
+
+async function tryGeminiGenerateContent({ prompt, apiKey, model, width, height, logSource }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const textToSend = `${prompt}\n\nGenerate a ${closestAspectRatio(width, height)} desktop wallpaper image. Return image data.`;
   const body = {
     contents: [
       {
@@ -58,14 +75,19 @@ async function tryModelsGenerateContent({ prompt, apiKey, model, width, height, 
         ]
       }
     ],
-    generationConfig: { temperature: 0.8 }
+    generationConfig: {
+      responseModalities: ['TEXT', 'IMAGE']
+    }
   };
   if (logSource) {
     await logPromptLine({ endpoint: 'models:generateContent', model, width, height, text: textToSend, source: logSource });
   }
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
     body: JSON.stringify(body)
   });
   if (!res.ok) {
@@ -75,48 +97,55 @@ async function tryModelsGenerateContent({ prompt, apiKey, model, width, height, 
     throw err;
   }
   const json = await res.json();
-  // Look for inline image data
-  const parts = json?.candidates?.[0]?.content?.parts || [];
-  const inline = parts.find(p => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data));
-  if (!inline) throw new Error('Gemini models API: missing inline image data');
-  const data = inline.inlineData?.data || inline.inline_data?.data;
+  const b64 = extractInlineImage(json);
+  if (!b64) throw new Error('Gemini models API: missing inline image data');
+  return Buffer.from(b64, 'base64');
+}
+
+async function tryImagenPredict({ prompt, apiKey, model, width, height, logSource }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predict`;
+  const parameters = {
+    sampleCount: 1,
+    aspectRatio: closestAspectRatio(width, height)
+  };
+  if (/^imagen-4\.0-(generate|ultra)-001$/i.test(model) && Math.max(width, height) >= 1920) {
+    parameters.imageSize = '2K';
+  }
+  const body = {
+    instances: [
+      {
+        prompt
+      }
+    ],
+    parameters
+  };
+  if (logSource) {
+    await logPromptLine({ endpoint: 'models:predict', model, width, height, text: prompt, source: logSource });
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(`Imagen API error ${res.status}: ${text}`);
+    err.status = res.status;
+    throw err;
+  }
+  const json = await res.json();
+  const data = extractPredictionImage(json);
+  if (!data) throw new Error('Imagen API: missing image data');
   return Buffer.from(data, 'base64');
 }
 
-export async function generateWithGemini({ prompt, apiKey, model, width = 2560, height = 1440, logSource }) {
+export async function generateWithGemini({ prompt, apiKey, model = 'gemini-2.5-flash-image', width = 2560, height = 1440, logSource }) {
   if (!apiKey) throw new Error('GEMINI_API_KEY is required for Gemini image generation');
-  if (!model) throw new Error('image.config.json geminiModel is required');
-
-  const isGeminiFamily = /^gemini[-:]/i.test(model) || model.includes('gemini');
-  // Prefer Images API if the model name suggests image-generation or preview variants
-  const looksLikeImageModel = /imagen|image|preview/i.test(model);
-  const primary = looksLikeImageModel ? 'images' : (isGeminiFamily ? 'models' : 'images');
-
-  if (primary === 'models') {
-    try {
-      return await tryModelsGenerateContent({ prompt, apiKey, model, width, height, logSource });
-    } catch (e1) {
-      try {
-        return await tryImagesGenerate({ prompt, apiKey, model, width, height, logSource });
-      } catch (e2) {
-        const msg = `Gemini generation failed: ${e1?.message || e1} | fallback: ${e2?.message || e2}`;
-        const err = new Error(msg);
-        err.cause = { primary: e1, fallback: e2 };
-        throw err;
-      }
-    }
-  } else {
-    try {
-      return await tryImagesGenerate({ prompt, apiKey, model, width, height, logSource });
-    } catch (e1) {
-      try {
-        return await tryModelsGenerateContent({ prompt, apiKey, model, width, height, logSource });
-      } catch (e2) {
-        const msg = `Gemini generation failed: ${e1?.message || e1} | fallback: ${e2?.message || e2}`;
-        const err = new Error(msg);
-        err.cause = { primary: e1, fallback: e2 };
-        throw err;
-      }
-    }
+  if (/^imagen-/i.test(model)) {
+    return tryImagenPredict({ prompt, apiKey, model, width, height, logSource });
   }
+  return tryGeminiGenerateContent({ prompt, apiKey, model, width, height, logSource });
 }
