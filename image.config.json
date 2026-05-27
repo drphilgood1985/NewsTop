@@ -18,8 +18,8 @@
     "max": 10
   },
   "resolution": { "width": 2560, "height": 1440 },
-  "geminiModel": "gemini-2.5-flash-image",
-  "geminiTextModel": "gemini-2.5-flash",
+  "openaiImageModel": "gpt-image-2",
+  "openaiTextModel": "gpt-5.4-mini",
   "stylePool": [
     "fine art photography, prime lens, shallow depth of field",
     "cinematic, anamorphic lens flare, rich contrast",

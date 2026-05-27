@@ -1,24 +1,15 @@
 import { timeOfDayDescriptor } from './util.js';
 
-function extractText(json) {
-  const parts = json?.candidates?.[0]?.content?.parts || [];
-  return parts
-    .map(part => part?.text || '')
-    .filter(Boolean)
-    .join('')
-    .trim();
-}
-
-// Uses Gemini text generation to produce a single, imagery-ready prompt.
-export async function refinePromptWithGemini({
+// Uses OpenAI text generation to produce a single, imagery-ready prompt.
+export async function refinePromptWithOpenAI({
   headlines = [],
   cfg,
   apiKey,
-  model = 'gemini-2.5-flash',
+  model = 'gpt-5.4-mini',
   date = new Date()
 }) {
-  if (!apiKey) throw new Error('GEMINI_API_KEY is required for Gemini prompt refinement');
-  if (!model) throw new Error('Gemini text model is required for prompt refinement');
+  if (!apiKey) throw new Error('OPENAI_API_KEY is required for OpenAI prompt refinement');
+  if (!model) throw new Error('OpenAI text model is required for prompt refinement');
 
   const timeDesc = timeOfDayDescriptor(date);
   let selectedStyle = '';
@@ -42,36 +33,30 @@ export async function refinePromptWithGemini({
     ...headlines.slice(0, 5)
   ].filter(Boolean).join('\n');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const res = await fetch(url, {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey
+      'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      system_instruction: {
-        parts: [{ text: sys }]
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: userPayload }]
-        }
+      model,
+      temperature: 0.8,
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: userPayload }
       ],
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 180
-      }
+      max_completion_tokens: 180
     })
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Gemini prompt refine error ${res.status}: ${text}`);
+    const err = new Error(`OpenAI prompt refine error ${res.status}: ${text}`);
+    err.status = res.status;
+    throw err;
   }
-
   const json = await res.json();
-  const content = extractText(json);
-  if (!content) throw new Error('Gemini returned empty prompt content');
+  const content = json?.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error('OpenAI returned empty prompt content');
   return { prompt: content, selectedStyle };
 }

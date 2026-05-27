@@ -14,9 +14,8 @@ import { envConfig, loadImageConfig } from './src/config.js';
 import { fetchHeadlines } from './src/news.js';
 import { extractKeywordsFromHeadlines } from './src/keywords.js';
 import { buildPrompt } from './src/prompt.js';
-import { fallbackRandomImage } from './src/image.js';
-import { refinePromptWithGemini } from './src/refinePrompt.gemini.js';
-import { generateWithGemini } from './src/image-gemini.js';
+import { fallbackRandomImage, generateWithOpenAI } from './src/image.js';
+import { refinePromptWithOpenAI } from './src/refinePrompt.openai.js';
 import { setWallpaper } from './src/wallpaper.js';
 
 function tsForFile(d = new Date()) {
@@ -51,7 +50,7 @@ async function main() {
 
   // Load env + image config
   const env = envConfig();
-  jlog('INFO', { env: { DESKTOP_ENV: env.DESKTOP_ENV, OUTPUT_DIR: env.OUTPUT_DIR, GEMINI: env.GEMINI_API_KEY ? 'present' : 'absent' } });
+  jlog('INFO', { env: { DESKTOP_ENV: env.DESKTOP_ENV, OUTPUT_DIR: env.OUTPUT_DIR, OPENAI: env.OPENAI_API_KEY ? 'present' : 'absent' } });
 
   let cfg;
   try {
@@ -84,53 +83,53 @@ async function main() {
     clog('WARN', 'No keywords extracted. Continuing with fallback image generation.');
   }
 
-  // Build base prompt and refine via Gemini
+  // Build base prompt and refine via OpenAI
   const basePrompt = buildPrompt({ keywords, cfg, date: new Date() });
   clog('INFO', 'Base prompt built:');
   clog('PROMPT', basePrompt);
 
   let refinedPrompt = basePrompt;
-  if (env.GEMINI_API_KEY) {
+  if (env.OPENAI_API_KEY) {
     try {
-      const { prompt: p, selectedStyle } = await refinePromptWithGemini({
+      const { prompt: p, selectedStyle } = await refinePromptWithOpenAI({
         headlines,
         keywords,
         cfg,
-        apiKey: env.GEMINI_API_KEY,
-        model: process.env.GEMINI_TEXT_MODEL || cfg.geminiTextModel || 'gemini-2.5-flash',
+        apiKey: env.OPENAI_API_KEY,
+        model: process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini',
         date: new Date()
       });
       refinedPrompt = p;
-      clog('INFO', 'Refined prompt created via Gemini');
+      clog('INFO', 'Refined prompt created via OpenAI');
       if (selectedStyle) clog('INFO', 'Random style selected:', selectedStyle);
       clog('PROMPT', refinedPrompt);
     } catch (e) {
-      clog('WARN', 'Gemini prompt refinement failed:', e?.message || e);
+      clog('WARN', 'OpenAI prompt refinement failed:', e?.message || e);
     }
   } else {
-    clog('WARN', 'GEMINI_API_KEY absent; using base prompt without refinement');
+    clog('WARN', 'OPENAI_API_KEY absent; using base prompt without refinement');
   }
 
   // Generate/fetch image
   let buffer;
   let generator = 'fallback';
   const g0 = performance.now();
-  if (env.GEMINI_API_KEY) {
+  if (env.OPENAI_API_KEY) {
     try {
-      buffer = await generateWithGemini({
+      buffer = await generateWithOpenAI({
         prompt: refinedPrompt,
-        apiKey: env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image',
+        apiKey: env.OPENAI_API_KEY,
+        model: process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1',
         width: (cfg.resolution && cfg.resolution.width) || 2560,
         height: (cfg.resolution && cfg.resolution.height) || 1440
       });
-      generator = (process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image') + ' (gemini)';
-      clog('INFO', 'Gemini image generated with model:', (process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image'));
+      generator = (process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1') + ' (openai)';
+      clog('INFO', 'OpenAI image generated with model:', (process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1'));
     } catch (e) {
-      clog('WARN', 'Gemini generation failed:', e?.message || e);
+      clog('WARN', 'OpenAI image generation failed:', e?.message || e);
     }
   } else {
-    clog('WARN', 'GEMINI_API_KEY absent; skipping Gemini generation');
+    clog('WARN', 'OPENAI_API_KEY absent; skipping OpenAI generation');
   }
   if (!buffer) {
     try {

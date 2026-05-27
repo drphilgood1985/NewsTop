@@ -4,9 +4,8 @@ import { envConfig, loadImageConfig, timestampSlug } from './config.js';
 import { fetchHeadlines } from './news.js';
 import { extractKeywordsFromHeadlines } from './keywords.js';
 import { buildPrompt } from './prompt.js';
-import { fallbackRandomImage, pickRandomImageFromDir, saveImage } from './image.js';
-import { generateWithGemini } from './image-gemini.js';
-import { refinePromptWithGemini } from './refinePrompt.gemini.js';
+import { fallbackRandomImage, generateWithOpenAI, pickRandomImageFromDir, saveImage } from './image.js';
+import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
 
@@ -59,10 +58,10 @@ async function main() {
   if (FOCUS) log('Focus:', FOCUS);
   const PROMPT_OVERRIDE = (promptArg || process.env.CUSTOM_PROMPT || '').trim();
   if (PROMPT_OVERRIDE) log('Prompt override detected');
-  const rawProvider = (providerArg || process.env.IMAGE_PROVIDER || 'gemini').trim().toLowerCase();
-  const PROVIDER = rawProvider === 'openai' ? 'gemini' : rawProvider;
-  if (rawProvider === 'openai') {
-    console.warn('IMAGE_PROVIDER=openai is deprecated in this Gemini pipeline; using Gemini instead.');
+  const rawProvider = (providerArg || process.env.IMAGE_PROVIDER || 'openai').trim().toLowerCase();
+  const PROVIDER = rawProvider === 'gemini' ? 'openai' : rawProvider;
+  if (rawProvider === 'gemini') {
+    console.warn('IMAGE_PROVIDER=gemini is no longer used; using OpenAI instead.');
   }
   log('Image provider:', PROVIDER || 'default');
 
@@ -118,25 +117,25 @@ async function main() {
     }
     if (!keywords.length) throw new Error('No keywords extracted');
 
-    // 3) Build a base prompt (context) and refine via Gemini for best quality
+    // 3) Build a base prompt (context) and refine via OpenAI for best quality
     basePrompt = buildPrompt({ keywords, cfg, date });
   }
 
   log('BasePrompt:', basePrompt);
 
   let refinedPrompt = basePrompt;
-  if (env.GEMINI_API_KEY && !PROMPT_OVERRIDE) {
+  if (env.OPENAI_API_KEY && !PROMPT_OVERRIDE) {
     try {
-      const { prompt: p } = await refinePromptWithGemini({
+      const { prompt: p } = await refinePromptWithOpenAI({
         headlines,
         cfg,
-        apiKey: env.GEMINI_API_KEY,
-        model: process.env.GEMINI_TEXT_MODEL || cfg.geminiTextModel || 'gemini-2.5-flash',
+        apiKey: env.OPENAI_API_KEY,
+        model: process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini',
         date
       });
       refinedPrompt = p;
     } catch (e) {
-      console.error('Gemini prompt refinement failed:', e.message);
+      console.error('OpenAI prompt refinement failed:', e.message);
     }
   }
   log('RefinedPrompt:', refinedPrompt);
@@ -151,19 +150,19 @@ async function main() {
   let buffer;
   const { width = 2560, height = 1440 } = cfg.resolution || {};
   try {
-    if ((PROVIDER === 'gemini' || !PROVIDER) && env.GEMINI_API_KEY) {
-      buffer = await generateWithGemini({
+    if ((PROVIDER === 'openai' || !PROVIDER) && env.OPENAI_API_KEY) {
+      buffer = await generateWithOpenAI({
         prompt: refinedPrompt,
-        apiKey: env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || cfg.geminiModel || 'gemini-2.5-flash-image',
+        apiKey: env.OPENAI_API_KEY,
+        model: process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1',
         width,
         height,
         logSource: 'auto'
       });
     } else if (PROVIDER === 'fallback') {
       buffer = await fallbackRandomImage(keywords, { width, height });
-    } else if (PROVIDER === 'gemini') {
-      console.warn('GEMINI_API_KEY absent; using fallback image source');
+    } else if (PROVIDER === 'openai') {
+      console.warn('OPENAI_API_KEY absent; using fallback image source');
     } else {
       console.warn(`Unknown IMAGE_PROVIDER "${PROVIDER}"; using fallback image source`);
     }

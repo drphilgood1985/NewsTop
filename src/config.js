@@ -14,7 +14,7 @@ export async function loadImageConfig(cwd = process.cwd()) {
 
 export function envConfig() {
   return {
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
     DESKTOP_ENV: (process.env.DESKTOP_ENV || 'cinnamon').toLowerCase(),
     OUTPUT_DIR: process.env.OUTPUT_DIR || 'output'
   };
