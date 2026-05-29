@@ -4,7 +4,7 @@ import { appendJsonLine, ensureDir, log, writeFileAtomic } from './util.js';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
-async function logPromptLine({ endpoint, model, width, height, size, text, source }) {
+export async function appendPromptLog({ endpoint, model, width, height, size, prompt, text, source, metadata }) {
   try {
     const logsDir = path.resolve(process.cwd(), 'logs');
     await ensureDir(logsDir);
@@ -15,7 +15,8 @@ async function logPromptLine({ endpoint, model, width, height, size, text, sourc
       model,
       resolution: { width, height },
       size,
-      prompt: text
+      prompt: prompt || text || '',
+      ...(metadata && typeof metadata === 'object' ? { metadata } : {})
     });
   } catch {
     // best-effort logging; ignore failures
@@ -50,21 +51,23 @@ export async function generateWithOpenAI({
   model = 'gpt-image-1',
   width = 1920,
   height = 1080,
-  logSource
+  logSource,
+  metadata
 }) {
   if (!apiKey) throw new Error('OPENAI_API_KEY is required for OpenAI image generation');
   if (!model) throw new Error('OpenAI image model is required for image generation');
 
   const size = resolveOpenAISize(width, height);
   if (logSource) {
-    await logPromptLine({
+    await appendPromptLog({
       endpoint: 'images:generations',
       model,
       width,
       height,
       size,
-      text: prompt,
-      source: logSource
+      prompt,
+      source: logSource,
+      metadata
     });
   }
 

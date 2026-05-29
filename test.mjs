@@ -16,6 +16,7 @@ import { extractKeywordsFromHeadlines } from './src/keywords.js';
 import { buildPrompt } from './src/prompt.js';
 import { fallbackRandomImage, generateWithOpenAI } from './src/image.js';
 import { refinePromptWithOpenAI } from './src/refinePrompt.openai.js';
+import { evaluateGeneratedImageWithOpenAI } from './src/imageQa.openai.js';
 import { setWallpaper } from './src/wallpaper.js';
 
 function tsForFile(d = new Date()) {
@@ -89,19 +90,30 @@ async function main() {
   clog('PROMPT', basePrompt);
 
   let refinedPrompt = basePrompt;
+  let selectedStyle = '';
+  let embeddedHeadlineText = null;
+  let effectiveNegativePrompt = cfg.negative || '';
   if (env.OPENAI_API_KEY) {
     try {
-      const { prompt: p, selectedStyle } = await refinePromptWithOpenAI({
+      const result = await refinePromptWithOpenAI({
         headlines,
         keywords,
+        basePrompt,
         cfg,
         apiKey: env.OPENAI_API_KEY,
         model: process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini',
         date: new Date()
       });
+      const { prompt: p } = result;
+      selectedStyle = result.selectedStyle || '';
+      embeddedHeadlineText = result.embeddedHeadlineText || null;
+      effectiveNegativePrompt = result.effectiveNegativePrompt || effectiveNegativePrompt;
       refinedPrompt = p;
       clog('INFO', 'Refined prompt created via OpenAI');
       if (selectedStyle) clog('INFO', 'Random style selected:', selectedStyle);
+      if (embeddedHeadlineText?.snippets?.length) {
+        clog('INFO', 'Embedded headline snippets:', embeddedHeadlineText.snippets.join(' | '));
+      }
       clog('PROMPT', refinedPrompt);
     } catch (e) {
       clog('WARN', 'OpenAI prompt refinement failed:', e?.message || e);
@@ -147,6 +159,22 @@ async function main() {
   const g1 = performance.now();
   clog('INFO', `Image ready bytes=${buffer.length}`, `ms=${Math.round(g1 - g0)}`, `generator=${generator}`);
 
+  let qaResult = null;
+  if (env.OPENAI_API_KEY && embeddedHeadlineText?.enabled && cfg.embeddedHeadlineText?.qaEnabled !== false && generator !== 'fallback') {
+    try {
+      qaResult = await evaluateGeneratedImageWithOpenAI({
+        imageBuffer: buffer,
+        prompt: refinedPrompt,
+        metadata: { embeddedHeadlineText },
+        apiKey: env.OPENAI_API_KEY,
+        model: process.env.OPENAI_QA_MODEL || process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini'
+      });
+      jlog('INFO', { qaResult });
+    } catch (e) {
+      clog('WARN', 'OpenAI image QA failed:', e?.message || e);
+    }
+  }
+
   // Save test image
   const outDir = path.resolve(process.cwd(), env.OUTPUT_DIR || 'output');
   await fsp.mkdir(outDir, { recursive: true });
@@ -172,8 +200,12 @@ async function main() {
     headlinesCount: headlines.length,
     topHeadlinesSample: headlines.slice(0, 5),
     keywords,
+    selectedStyle,
+    embeddedHeadlineText,
+    effectiveNegativePrompt,
     basePrompt,
     refinedPrompt,
+    qaResult,
     generator,
     imagePath: imgPath,
     imageBytes: buffer.length

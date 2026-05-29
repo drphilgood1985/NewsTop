@@ -4,7 +4,8 @@ import { envConfig, loadImageConfig, timestampSlug } from './config.js';
 import { fetchHeadlines } from './news.js';
 import { extractKeywordsFromHeadlines } from './keywords.js';
 import { buildPrompt } from './prompt.js';
-import { fallbackRandomImage, generateWithOpenAI, pickRandomImageFromDir, saveImage } from './image.js';
+import { fallbackRandomImage, pickRandomImageFromDir, saveImage } from './image.js';
+import { generateOpenAIImageWithQa } from './imageWorkflow.js';
 import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
@@ -15,6 +16,23 @@ function isQuotaError(err) {
     msg.includes('insufficient tokens') ||
     msg.includes('quota') ||
     msg.includes('billing');
+}
+
+function isTruthyEnv(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || '').trim());
+}
+
+function printContributingHeadlines(headlines, { limit } = {}) {
+  const selected = Array.isArray(headlines) ? headlines.slice(0, limit || headlines.length) : [];
+  if (!selected.length) {
+    console.log('Contributing headlines: none');
+    return;
+  }
+
+  console.log(`Contributing headlines (${selected.length}):`);
+  selected.forEach((headline, index) => {
+    console.log(`${String(index + 1).padStart(2, ' ')}. ${headline}`);
+  });
 }
 
 async function main() {
@@ -54,6 +72,11 @@ async function main() {
     const m = a.match(/^--provider=(.*)$/);
     if (m) { providerArg = m[1]; break; }
   }
+  const RUN_VERBOSE = args.includes('run-verbose') ||
+    args.includes('--run-verbose') ||
+    args.includes('--verbose') ||
+    args.includes('-v') ||
+    isTruthyEnv(process.env.RUN_VERBOSE);
   const FOCUS = (focusArg || process.env.FOCUS || '').trim();
   if (FOCUS) log('Focus:', FOCUS);
   const PROMPT_OVERRIDE = (promptArg || process.env.CUSTOM_PROMPT || '').trim();
@@ -124,21 +147,42 @@ async function main() {
   log('BasePrompt:', basePrompt);
 
   let refinedPrompt = basePrompt;
+  let selectedStyle = '';
+  let promptHeadlines = headlines;
+  let embeddedHeadlineText = null;
+  let effectiveNegativePrompt = cfg.negative || '';
   if (env.OPENAI_API_KEY && !PROMPT_OVERRIDE) {
     try {
-      const { prompt: p } = await refinePromptWithOpenAI({
+      const {
+        prompt: p,
+        selectedStyle: style,
+        selectedHeadlines,
+        embeddedHeadlineText: embedded,
+        effectiveNegativePrompt: negativePrompt
+      } = await refinePromptWithOpenAI({
         headlines,
+        keywords,
+        basePrompt,
         cfg,
         apiKey: env.OPENAI_API_KEY,
         model: process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini',
         date
       });
       refinedPrompt = p;
+      selectedStyle = style || '';
+      promptHeadlines = selectedHeadlines || headlines;
+      embeddedHeadlineText = embedded || null;
+      effectiveNegativePrompt = negativePrompt || effectiveNegativePrompt;
     } catch (e) {
       console.error('OpenAI prompt refinement failed:', e.message);
     }
   }
   log('RefinedPrompt:', refinedPrompt);
+
+  if (RUN_VERBOSE) {
+    const limit = Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : 12;
+    printContributingHeadlines(promptHeadlines, { limit });
+  }
 
   // 4) Generate image
   const ts = timestampSlug(date);
@@ -151,14 +195,26 @@ async function main() {
   const { width = 2560, height = 1440 } = cfg.resolution || {};
   try {
     if ((PROVIDER === 'openai' || !PROVIDER) && env.OPENAI_API_KEY) {
-      buffer = await generateWithOpenAI({
+      const generation = await generateOpenAIImageWithQa({
         prompt: refinedPrompt,
         apiKey: env.OPENAI_API_KEY,
-        model: process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1',
+        imageModel: process.env.OPENAI_IMAGE_MODEL || cfg.openaiImageModel || 'gpt-image-1',
+        qaModel: process.env.OPENAI_QA_MODEL || process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_MODEL || cfg.openaiTextModel || 'gpt-5.4-mini',
         width,
         height,
-        logSource: 'auto'
+        cfg,
+        source: 'auto',
+        metadata: {
+          headlines: promptHeadlines.slice(0, Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : 12),
+          keywords,
+          selectedStyle,
+          basePrompt,
+          embeddedHeadlineText,
+          effectiveNegativePrompt
+        }
       });
+      buffer = generation.buffer;
+      refinedPrompt = generation.prompt;
     } else if (PROVIDER === 'fallback') {
       buffer = await fallbackRandomImage(keywords, { width, height });
     } else if (PROVIDER === 'openai') {

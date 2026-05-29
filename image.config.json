@@ -17,6 +17,38 @@
     "minLength": 4,
     "max": 10
   },
+  "headlinePromptLimit": 12,
+  "embeddedHeadlineText": {
+    "enabled": true,
+    "maxItems": 2,
+    "maxWordsPerExcerpt": 8,
+    "readability": "barely_legible",
+    "placement": "scene_native",
+    "qaEnabled": true,
+    "retryOnReject": true,
+    "allowedSurfaces": [
+      "newspaper",
+      "phone screen",
+      "transit display",
+      "distant billboard",
+      "ticker strip",
+      "cafe menu",
+      "luggage tag",
+      "small poster",
+      "protest placard"
+    ],
+    "bannedSurfaces": [
+      "podium",
+      "lectern",
+      "stage backdrop",
+      "giant foreground billboard",
+      "train roof sign",
+      "logo",
+      "watermark overlay",
+      "plane banner",
+      "dominant marquee"
+    ]
+  },
   "resolution": { "width": 2560, "height": 1440 },
   "openaiImageModel": "gpt-image-2",
   "openaiTextModel": "gpt-5.4-mini",

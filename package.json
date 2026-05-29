@@ -11,7 +11,9 @@
   "scripts": {
     "start": "node src/run-once.js",
     "run-once": "node src/run-once.js",
+    "run-verbose": "node src/run-once.js run-verbose",
     "debug": "DEBUG=1 node src/run-once.js",
+    "test": "node --test test/*.test.mjs",
     "test-run": "node test.mjs",
     "setup": "bash scripts/setup.sh",
     "service:status": "bash scripts/status.sh",
