@@ -10,6 +10,12 @@ function parseJsonObject(text) {
   }
 }
 
+function compactForQa(text, maxChars = 600) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars - 3).replace(/\s+\S*$/, '').trim()}...`;
+}
+
 export function normalizeQaResult(value = {}) {
   const reasons = Array.isArray(value.reasons)
     ? value.reasons.map(reason => String(reason || '').trim()).filter(Boolean)
@@ -68,13 +74,11 @@ export async function evaluateGeneratedImageWithOpenAI({
     : [];
 
   const qaPrompt = [
-    'Evaluate this generated desktop wallpaper for subtle embedded headline text.',
-    'Return only valid JSON with keys: pass, reasons, textSubtlety, badPropsDetected, headlineTextPresent, currentEventsStillPrimary.',
-    'Pass only if any headline text is ambient/background detail, barely legible, and not the focal point.',
-    'Pass only if the scene still primarily reflects the current-events prompt.',
-    `Selected headline snippets: ${snippets.map(snippet => `"${snippet}"`).join(', ') || 'none'}.`,
-    `Banned props/surfaces: ${bannedSurfaces.join(', ') || 'podium, lectern, giant signage, watermark overlay'}.`,
-    `Prompt used: ${prompt}`
+    'QA this wallpaper. Return JSON only: pass, reasons, textSubtlety, badPropsDetected, headlineTextPresent, currentEventsStillPrimary.',
+    'Pass only if headline text is tiny/background/barely legible and the image still matches the current-events prompt.',
+    `Snippets: ${snippets.map(snippet => `"${snippet}"`).join(', ') || 'none'}.`,
+    `Banned: ${bannedSurfaces.join(', ') || 'podium, lectern, giant signage, watermark overlay'}.`,
+    `Prompt: ${compactForQa(prompt)}`
   ].join('\n');
 
   const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -105,7 +109,7 @@ export async function evaluateGeneratedImageWithOpenAI({
           ]
         }
       ],
-      max_completion_tokens: 350
+      max_completion_tokens: 120
     })
   });
 

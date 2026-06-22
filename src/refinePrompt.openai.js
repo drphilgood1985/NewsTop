@@ -1,12 +1,23 @@
 import { timeOfDayDescriptor } from './util.js';
-import {
-  buildEmbeddedHeadlineInstruction,
-  buildEmbeddedHeadlineMetadata,
-  ensureEmbeddedHeadlineInstruction,
-  getEffectiveNegativePrompt,
-  planEmbeddedHeadlineText,
-  sanitizePromptForEmbeddedHeadlineText
-} from './embeddedHeadlines.js';
+
+const DEFAULT_HEADLINE_LIMIT = 5;
+const DEFAULT_HEADLINE_MAX_CHARS = 110;
+
+function resolvePositiveInteger(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function compactHeadline(headline, maxChars = DEFAULT_HEADLINE_MAX_CHARS) {
+  const limit = Math.max(8, maxChars);
+  const text = String(headline || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!text || text.length <= limit) return text;
+  const trimmed = text.slice(0, limit - 3).replace(/\s+\S*$/, '').trim();
+  return `${trimmed || text.slice(0, limit - 3)}...`;
+}
 
 // Uses OpenAI text generation to produce a single, imagery-ready prompt.
 export async function refinePromptWithOpenAI({
@@ -25,40 +36,42 @@ export async function refinePromptWithOpenAI({
   let selectedStyle = '';
   const pool = Array.isArray(cfg?.stylePool) ? cfg.stylePool : [];
   if (pool.length) selectedStyle = pool[Math.floor(Math.random() * pool.length)];
-  const headlineLimit = Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : 12;
+  const headlineLimit = resolvePositiveInteger(cfg?.headlinePromptLimit, DEFAULT_HEADLINE_LIMIT);
+  const headlineMaxChars = resolvePositiveInteger(cfg?.headlineMaxChars, DEFAULT_HEADLINE_MAX_CHARS);
   const selectedHeadlines = headlines.slice(0, headlineLimit);
-  const embeddedHeadlineText = planEmbeddedHeadlineText(selectedHeadlines, cfg);
-  const effectiveNegativePrompt = getEffectiveNegativePrompt(cfg?.negative || '', embeddedHeadlineText);
-  const basePromptForModel = sanitizePromptForEmbeddedHeadlineText(basePrompt, embeddedHeadlineText);
-  const embeddedInstruction = buildEmbeddedHeadlineInstruction(embeddedHeadlineText);
+  const headlineSignals = selectedHeadlines
+    .map(headline => compactHeadline(headline, headlineMaxChars))
+    .filter(Boolean);
+  const effectiveNegativePrompt = cfg?.negative || '';
+  const basePromptForModel = basePrompt;
 
   const sys = [
-    'You write compact prompts for a daily current-events desktop wallpaper.',
-    'The image must visibly reflect the provided headlines, not just their mood.',
-    'Pick 2-4 concrete headline-derived subjects, places, institutions, events, or objects from the input.',
-    'Use recognizable editorial visual anchors and keep them tied to the headlines.',
-    embeddedHeadlineText.enabled
-      ? 'Do not avoid all text: only the provided exact headline excerpts may appear, and only as barely legible environmental texture. Do not invent, paraphrase, or add any other visible words.'
-      : 'Avoid generic symbolism, unrelated scenes, readable text, logos, gore, and portrait likenesses of living public figures or celebrities.',
+    'You write compact image prompts for current events rendered as museum-grade fine art.',
+    'Start from the lived reality of the headline cues: place, weather, public consequence, private emotion, tension, loss, hope, or uncertainty.',
+    'Create one emotionally legible scene that feels current first and artful second.',
+    'If the required style is photographic, make it fine-art photography: composed, intentional, emotionally resonant, and gallery-worthy, never a literal press photo.',
+    'Use 1-2 headline-derived motifs only when they deepen the feeling; avoid poster symbolism and decorative abstraction.',
+    'Use headline cues as private source material only; do not quote, paraphrase, display, or describe headline text.',
+    'The final image must be pure imagery: no readable words, letters, captions, labels, tickers, newspaper front pages, screens of text, or text-bearing banners.',
     'For named people, show contextual symbols such as buildings, documents, vehicles, crowds, flags, or locations instead of faces.',
-    embeddedHeadlineText.enabled
-      ? `Never use these headline text surfaces or props: ${embeddedHeadlineText.bannedSurfaces.join(', ')}.`
-      : 'Do not use podiums, lecterns, stage backdrops, giant signage, train roof signs, or watermark overlays.',
-    'Output one image prompt in 1-2 sentences, include the time-of-day and required style,',
-    'and end with "Avoid: ...". Output only the prompt line.'
+    'Do not use podiums, lecterns, stage backdrops, giant signage, train roof signs, infographics, collage, newspapers, phones, or watermark overlays.',
+    'Make the viewer feel something before they decode the news reference.',
+    'Output one image prompt under 90 words. Include the time-of-day and required style. End with "Avoid: ...". Output only the prompt line.'
   ].join(' ');
+
+  const artDirection = [
+    cfg?.style ? `style: ${cfg.style}` : '',
+    cfg?.vibe ? `vibe: ${cfg.vibe}` : '',
+    selectedStyle ? `required style: ${selectedStyle}` : ''
+  ].filter(Boolean).join('; ');
 
   const userPayload = [
     `Time: ${timeDesc}`,
-    cfg?.style ? `Style: ${cfg.style}` : '',
-    cfg?.vibe ? `Vibe: ${cfg.vibe}` : '',
-    selectedStyle ? `Required randomized art/photography style: ${selectedStyle}` : '',
+    artDirection ? `Art direction: ${artDirection}` : '',
     effectiveNegativePrompt ? `Avoid terms: ${effectiveNegativePrompt}` : '',
-    embeddedInstruction ? `Embedded headline text requirements: ${embeddedInstruction}` : '',
     keywords.length ? `Extracted keywords: ${keywords.join(', ')}` : '',
-    basePromptForModel ? `Keyword-based base prompt: ${basePromptForModel}` : '',
-    'Headlines:',
-    ...selectedHeadlines.map((headline, index) => `${index + 1}. ${headline}`)
+    basePromptForModel ? `Base prompt: ${basePromptForModel}` : '',
+    headlineSignals.length ? `Private current-event cues, not visual text: ${headlineSignals.map((headline, index) => `${index + 1}. ${headline}`).join(' | ')}` : ''
   ].filter(Boolean).join('\n');
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -74,7 +87,7 @@ export async function refinePromptWithOpenAI({
         { role: 'system', content: sys },
         { role: 'user', content: userPayload }
       ],
-      max_completion_tokens: 260
+      max_completion_tokens: 180
     })
   });
   if (!res.ok) {
@@ -84,16 +97,12 @@ export async function refinePromptWithOpenAI({
     throw err;
   }
   const json = await res.json();
-  const content = ensureEmbeddedHeadlineInstruction(
-    json?.choices?.[0]?.message?.content?.trim(),
-    embeddedHeadlineText
-  );
+  const content = json?.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error('OpenAI returned empty prompt content');
   return {
     prompt: content,
     selectedStyle,
     selectedHeadlines,
-    embeddedHeadlineText: buildEmbeddedHeadlineMetadata(embeddedHeadlineText),
     effectiveNegativePrompt
   };
 }

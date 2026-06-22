@@ -10,6 +10,8 @@ import { refinePromptWithOpenAI } from './refinePrompt.openai.js';
 import { setWallpaper } from './wallpaper.js';
 import { ensureDir, log, nowLocal, joinUniqueWords } from './util.js';
 
+const DEFAULT_HEADLINE_PROMPT_LIMIT = 5;
+
 function isQuotaError(err) {
   const msg = (err?.message || String(err || '')).toLowerCase();
   return err?.status === 429 ||
@@ -149,7 +151,6 @@ async function main() {
   let refinedPrompt = basePrompt;
   let selectedStyle = '';
   let promptHeadlines = headlines;
-  let embeddedHeadlineText = null;
   let effectiveNegativePrompt = cfg.negative || '';
   if (env.OPENAI_API_KEY && !PROMPT_OVERRIDE) {
     try {
@@ -157,7 +158,6 @@ async function main() {
         prompt: p,
         selectedStyle: style,
         selectedHeadlines,
-        embeddedHeadlineText: embedded,
         effectiveNegativePrompt: negativePrompt
       } = await refinePromptWithOpenAI({
         headlines,
@@ -171,7 +171,6 @@ async function main() {
       refinedPrompt = p;
       selectedStyle = style || '';
       promptHeadlines = selectedHeadlines || headlines;
-      embeddedHeadlineText = embedded || null;
       effectiveNegativePrompt = negativePrompt || effectiveNegativePrompt;
     } catch (e) {
       console.error('OpenAI prompt refinement failed:', e.message);
@@ -180,7 +179,7 @@ async function main() {
   log('RefinedPrompt:', refinedPrompt);
 
   if (RUN_VERBOSE) {
-    const limit = Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : 12;
+    const limit = Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : DEFAULT_HEADLINE_PROMPT_LIMIT;
     printContributingHeadlines(promptHeadlines, { limit });
   }
 
@@ -205,11 +204,10 @@ async function main() {
         cfg,
         source: 'auto',
         metadata: {
-          headlines: promptHeadlines.slice(0, Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : 12),
+          headlines: promptHeadlines.slice(0, Number.isInteger(cfg?.headlinePromptLimit) ? cfg.headlinePromptLimit : DEFAULT_HEADLINE_PROMPT_LIMIT),
           keywords,
           selectedStyle,
           basePrompt,
-          embeddedHeadlineText,
           effectiveNegativePrompt
         }
       });

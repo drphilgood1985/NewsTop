@@ -1,12 +1,12 @@
 {
-  "style": "cinematic, photorealistic, high detail",
-  "vibe": "moody yet uplifting, dynamic lighting",
+  "style": "museum-grade fine-art current-events image, atmospheric, high detail",
+  "vibe": "human, poetic, emotionally resonant, dramatic light, art imitating life",
   "artistHints": [
-    "in the style of National Geographic photography",
-    "inspired by documentary stills",
-    "subtle cinematic color grading"
+    "museum-scale fine-art composition",
+    "old master lighting and depth",
+    "artful documentary framing"
   ],
-  "negative": "text, watermark, logo, low-res, extra limbs, deformed",
+  "negative": "text, readable text, letters, captions, labels, headlines, news tickers, newspaper front pages, phones showing text, screens of text, infographic, meme, split-screen collage, giant signage, podiums, lecterns, stock photo, literal press photo, wire-service photo, paparazzi, watermark, logo, low-res, extra limbs, deformed",
   "feeds": [
     "https://feeds.bbci.co.uk/news/rss.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
@@ -15,63 +15,29 @@
   ],
   "keywords": {
     "minLength": 4,
-    "max": 10
+    "max": 7
   },
-  "headlinePromptLimit": 12,
-  "embeddedHeadlineText": {
-    "enabled": true,
-    "maxItems": 2,
-    "maxWordsPerExcerpt": 8,
-    "readability": "barely_legible",
-    "placement": "scene_native",
-    "qaEnabled": true,
-    "retryOnReject": true,
-    "allowedSurfaces": [
-      "newspaper",
-      "phone screen",
-      "transit display",
-      "distant billboard",
-      "ticker strip",
-      "cafe menu",
-      "luggage tag",
-      "small poster",
-      "protest placard"
-    ],
-    "bannedSurfaces": [
-      "podium",
-      "lectern",
-      "stage backdrop",
-      "giant foreground billboard",
-      "train roof sign",
-      "logo",
-      "watermark overlay",
-      "plane banner",
-      "dominant marquee"
-    ]
-  },
+  "headlinePromptLimit": 5,
   "resolution": { "width": 2560, "height": 1440 },
   "openaiImageModel": "gpt-image-2",
   "openaiTextModel": "gpt-5.4-mini",
   "stylePool": [
-    "fine art photography, prime lens, shallow depth of field",
-    "cinematic, anamorphic lens flare, rich contrast",
-    "documentary photography, natural light, candid composition",
-    "long exposure, silky motion blur, night photography",
-    "aerial photography, sweeping vistas, grand scale",
-    "macro photography, extreme detail, bokeh",
-    "black and white, high contrast, grainy film",
-    "color gel lighting, bold hues, studio look",
-    "moody noir, chiaroscuro lighting, dramatic shadows",
-    "golden hour, warm light, soft atmosphere",
-    "pastel tones, soft focus, dreamy haze",
-    "minimalist composition, negative space, clean lines",
-    "surrealism, dreamlike composition, visual metaphor",
-    "abstract shapes, geometric forms, modernist aesthetic",
-    "painterly impressionism, soft brush-like textures",
-    "hyperrealism, ultra-detailed textures, lifelike clarity",
-    "street photography, dynamic framing, human moments",
-    "landscape photography, epic clouds, sweeping light",
-    "architectural photography, symmetry, vanishing points",
-    "editorial fashion style, dramatic posing, couture"
+    "Renaissance fresco, balanced human figures, architectural depth, luminous tempera color",
+    "Baroque oil painting, chiaroscuro, diagonal motion, intense emotional drama",
+    "Dutch Golden Age painting, quiet domestic realism, window light, tactile surfaces",
+    "Romantic landscape painting, sublime weather, small figures against vast forces",
+    "Neoclassical history painting, restrained palette, sculptural figures, moral gravity",
+    "Symbolist painting, dream logic, mythic atmosphere, charged visual allegory",
+    "Impressionist oil painting, broken brushwork, fleeting light, everyday life transformed",
+    "Post-Impressionist painting, expressive color, thick impasto, heightened feeling",
+    "Art Nouveau illustration, flowing organic lines, elegant decorative composition",
+    "Byzantine icon-inspired painting, gold atmosphere, solemn frontal forms, sacred stillness",
+    "Japanese ukiyo-e woodblock print, flattened perspective, bold shapes, rhythmic weather",
+    "early modern mural painting, monumental civic scale, interwoven human stories",
+    "fine-art documentary photography, composed natural light, emotional restraint, museum print",
+    "pictorialist photography, soft focus, tonal atmosphere, handcrafted photographic texture",
+    "large-format color photography, precise composition, quiet monumental scale, gallery realism",
+    "black and white fine-art photography, sculptural light, deep shadow, human stillness",
+    "cinematic art photography, chiaroscuro, carefully staged realism, restrained color"
   ]
 }
